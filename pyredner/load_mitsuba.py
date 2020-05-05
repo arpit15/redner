@@ -74,14 +74,20 @@ def parse_camera(node):
     up = None
     clip_near = 1e-2
     resolution = [256, 256]
+    viewport = None 
+    crop_offset_x = None
+    crop_offset_y = None
+    crop_width = resolution[1]
+    crop_height = resolution[0]
+
     for child in node:
         if 'name' in child.attrib:
             if child.attrib['name'] == 'fov':
                 fov = torch.tensor([float(child.attrib['value'])])
-            elif child.attrib['name'] == 'toWorld':
+            elif child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
                 has_lookat = False
                 for grandchild in child:
-                    if grandchild.tag.lower() == 'lookat':
+                    if grandchild.tag.lower() == 'lookat' or grandchild.tag.lower() == 'look_at':
                         has_lookat = True
                         position = parse_vector(grandchild.attrib['origin'])
                         look_at = parse_vector(grandchild.attrib['target'])
@@ -96,13 +102,29 @@ def parse_camera(node):
                         resolution[1] = int(grandchild.attrib['value'])
                     elif grandchild.attrib['name'] == 'height':
                         resolution[0] = int(grandchild.attrib['value'])
+                    elif grandchild.attrib['name'] == 'crop_offset_x':
+                        crop_offset_x = int(grandchild.attrib['value'])
+                    elif grandchild.attrib['name'] == 'crop_offset_y':
+                        crop_offset_y = int(grandchild.attrib['value'])
+                    elif grandchild.attrib['name'] == 'crop_width':
+                        crop_width = int(grandchild.attrib['value'])
+                    elif grandchild.attrib['name'] == 'crop_height':
+                        crop_height = int(grandchild.attrib['value'])
+
+    if crop_offset_y is None:
+        viewport = [0, 0, resolution[0], resolution[1]]
+    else:
+        viewport = [crop_offset_y, crop_offset_x, \
+                      crop_offset_y +  crop_height, \
+                      crop_offset_x + crop_width ]
 
     return pyredner.Camera(position     = position,
                            look_at      = look_at,
                            up           = up,
                            fov          = fov,
                            clip_near    = clip_near,
-                           resolution   = resolution)
+                           resolution   = resolution,
+                           viewport     = viewport)
 
 def parse_material(node, device, two_sided = False):
 
@@ -239,11 +261,11 @@ def parse_shape(node, material_dict, shape_id, device, shape_group_dict = None):
             if 'name' in child.attrib:
                 if child.attrib['name'] == 'filename':
                     filename = child.attrib['value']
-                elif child.attrib['name'] == 'toWorld':
+                elif child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
                     to_world = parse_transform(child)
                 elif child.attrib['name'] == 'shapeIndex':
                     serialized_shape_id = int(child.attrib['value'])
-                elif child.attrib['name'] == 'maxSmoothAngle':
+                elif child.attrib['name'] == 'maxSmoothAngle' or child.attrib['name'] == 'max_smooth_angle':
                     max_smooth_angle = float(child.attrib['value'])
             if child.tag == 'ref':
                 mat_id = material_dict[child.attrib['id']]
@@ -345,7 +367,7 @@ def parse_shape(node, material_dict, shape_id, device, shape_group_dict = None):
         light_intensity = None
         for child in node:
             if 'name' in child.attrib:
-                if child.attrib['name'] == 'toWorld':
+                if child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
                     to_world = parse_transform(child)
             if child.tag == 'ref':
                 mat_id = material_dict[child.attrib['id']]
@@ -386,7 +408,7 @@ def parse_shape(node, material_dict, shape_id, device, shape_group_dict = None):
         shape = None
         for child in node:
             if 'name' in child.attrib:
-                if child.attrib['name'] == 'toWorld':
+                if child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
                     to_world = parse_transform(child)
             if child.tag == 'ref':
                 shape = shape_group_dict[child.attrib['id']]
@@ -454,7 +476,7 @@ def parse_scene(node, device):
                 if child_s.attrib['name'] == 'filename':
                     assert child_s.tag == 'string'
                     envmap_filename = child_s.attrib['value']
-                if child_s.attrib['name'] == 'toWorld':
+                if child_s.attrib['name'] == 'toWorld' or child_s.attrib['name'] == 'to_world':
                     to_world = parse_transform(child_s)
             # load envmap
             envmap = scale * pyredner.imread(envmap_filename).to(device)
