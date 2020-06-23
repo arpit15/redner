@@ -268,7 +268,7 @@ def parse_shape(node, material_dict, param_dict, shape_id, device, shape_group_d
                 if child.attrib['name'] == 'filename':
                     filename = check_default(child.attrib['value'], param_dict)
                 elif child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
-                    to_world = parse_transform(child)
+                    to_world = parse_transform(child, param_dict)
                 elif child.attrib['name'] == 'shapeIndex':
                     serialized_shape_id = int(child.attrib['value'])
                 elif child.attrib['name'] == 'maxSmoothAngle' or child.attrib['name'] == 'max_smooth_angle':
@@ -374,7 +374,7 @@ def parse_shape(node, material_dict, param_dict, shape_id, device, shape_group_d
         for child in node:
             if 'name' in child.attrib:
                 if child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
-                    to_world = parse_transform(child)
+                    to_world = parse_transform(child, param_dict)
             if child.tag == 'ref':
                 mat_id = material_dict[child.attrib['id']]
             elif child.tag == 'emitter':
@@ -415,7 +415,7 @@ def parse_shape(node, material_dict, param_dict, shape_id, device, shape_group_d
         for child in node:
             if 'name' in child.attrib:
                 if child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
-                    to_world = parse_transform(child)
+                    to_world = parse_transform(child, param_dict)
             if child.tag == 'ref':
                 shape = shape_group_dict[child.attrib['id']]
         # transform instance
@@ -445,14 +445,19 @@ def parse_xml(node, device, param_dict,
     cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap):
     
     for child in node:
+        # print(child.tag)
         if child.tag == 'include':
+            filename = check_default(child.attrib['filename'], param_dict)
+            tree = etree.parse(filename)
+            root = tree.getroot()
             cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap = \
-                            parse_xml(child, device, param_dict, 
+                            parse_xml(root, device, param_dict, 
                                 cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap)
         elif child.tag == 'default':
             # check if it is already in param_dict
             default_n = child.attrib['name']
-            if default_n is not in param_dict:
+            # print("default check for %s"%default_n)
+            if default_n not in param_dict:
                 param_dict[default_n] = check_default(child.attrib['value'], param_dict)
         elif child.tag == 'sensor':
             cam = parse_camera(child, param_dict)
@@ -467,7 +472,6 @@ def parse_xml(node, device, param_dict,
                 if child_s.tag == 'shape':
                     shape_group_dict[child.attrib['id']] = parse_shape(child_s, material_dict, param_dict, None)[0]
         elif child.tag == 'shape':
-
             shape, light = parse_shape(child, material_dict, param_dict, len(shapes), device, shape_group_dict if child.attrib['type'] == 'instance' else None)
             shapes.append(shape)
             # only shape
@@ -517,8 +521,9 @@ def parse_scene(node, device, param_dict):
     return pyredner.Scene(cam, shapes, shape_id, materials, lights, envmap)
 
 def load_mitsuba(filename: str,
-                 device: Optional[torch.device] = None,
-                 param_dict: dict):
+                    param_dict: dict,
+                 device: Optional[torch.device] = None
+                 ):
     """
         Load from a Mitsuba scene file as PyTorch tensors.
 

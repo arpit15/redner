@@ -21,7 +21,7 @@ class Scene:
     def __init__(self,
                  camera: pyredner.Camera,
                  shapes: List[pyredner.Shape] = [],
-                 shape_id,
+                 shape_id = dict(),
                  materials: List[pyredner.Material] = [],
                  area_lights: List[pyredner.AreaLight] = [],
                  objects: Optional[List[pyredner.Object]] = None,
