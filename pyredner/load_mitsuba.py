@@ -8,7 +8,13 @@ import pyredner.transform as transform
 from typing import Optional
 import math
 
-def parse_transform(node):
+def check_default(val, param_dict):
+    if val[0] == "$":
+        return param_dict[val[1:]]
+    else:
+        return val
+
+def parse_transform(node, param_dict):
     ret = torch.eye(4)
     for child in node:
         if child.tag == 'matrix':
@@ -19,9 +25,9 @@ def parse_transform(node):
                     (4, 4)))
             ret = value @ ret
         elif child.tag == 'translate':
-            x = float(child.attrib['x'])
-            y = float(child.attrib['y'])
-            z = float(child.attrib['z'])
+            x = float(check_default(child.attrib['x'], param_dict))
+            y = float(check_default(child.attrib['y'], param_dict))
+            z = float(check_default(child.attrib['z'], param_dict))
             value = transform.gen_translate_matrix(torch.tensor([x, y, z]))
             ret = value @ ret
         elif child.tag == 'scale':
@@ -29,16 +35,16 @@ def parse_transform(node):
             if 'value' in child.attrib:
                 x = y = z = float(child.attrib['value'])
             else:
-                x = float(child.attrib['x'])
-                y = float(child.attrib['y'])
-                z = float(child.attrib['z'])
+                x = float(check_default(child.attrib['x'], param_dict))
+                y = float(check_default(child.attrib['y'], param_dict))
+                z = float(check_default(child.attrib['z'], param_dict))
             value = transform.gen_scale_matrix(torch.tensor([x, y, z]))
             ret = value @ ret
         elif child.tag == 'rotate':
-            x = float(child.attrib['x']) if 'x' in child.attrib else 0.0
-            y = float(child.attrib['y']) if 'y' in child.attrib else 0.0
-            z = float(child.attrib['z']) if 'z' in child.attrib else 0.0
-            angle = transform.radians(float(child.attrib['angle']))
+            x = float(check_default(child.attrib['x'], param_dict)) if 'x' in child.attrib else 0.0
+            y = float(check_default(child.attrib['y'], param_dict)) if 'y' in child.attrib else 0.0
+            z = float(check_default(child.attrib['z'], param_dict)) if 'z' in child.attrib else 0.0
+            angle = transform.radians(float(check_default(child.attrib['angle'], param_dict)))
             axis = np.array([x, y, z])
             axis = axis / np.linalg.norm(axis)
             cos_theta = math.cos(angle)
@@ -67,7 +73,7 @@ def parse_vector(str):
     assert(v.ndim == 1)
     return torch.from_numpy(v)
 
-def parse_camera(node):
+def parse_camera(node, param_dict):
     fov = torch.tensor([45.0])
     position = None
     look_at = None
@@ -99,17 +105,17 @@ def parse_camera(node):
             for grandchild in child:
                 if 'name' in grandchild.attrib:
                     if grandchild.attrib['name'] == 'width':
-                        resolution[1] = int(grandchild.attrib['value'])
+                        resolution[1] = int(check_default(grandchild.attrib['value'], param_dict))
                     elif grandchild.attrib['name'] == 'height':
-                        resolution[0] = int(grandchild.attrib['value'])
+                        resolution[0] = int(check_default(grandchild.attrib['value'], param_dict))
                     elif grandchild.attrib['name'] == 'crop_offset_x':
-                        crop_offset_x = int(grandchild.attrib['value'])
+                        crop_offset_x = int(check_default(grandchild.attrib['value'], param_dict))
                     elif grandchild.attrib['name'] == 'crop_offset_y':
-                        crop_offset_y = int(grandchild.attrib['value'])
+                        crop_offset_y = int(check_default(grandchild.attrib['value'], param_dict))
                     elif grandchild.attrib['name'] == 'crop_width':
-                        crop_width = int(grandchild.attrib['value'])
+                        crop_width = int(check_default(grandchild.attrib['value'], param_dict))
                     elif grandchild.attrib['name'] == 'crop_height':
-                        crop_height = int(grandchild.attrib['value'])
+                        crop_height = int(check_default(grandchild.attrib['value'], param_dict))
 
     if crop_offset_y is None:
         viewport = [0, 0, resolution[0], resolution[1]]
@@ -126,7 +132,7 @@ def parse_camera(node):
                            resolution   = resolution,
                            viewport     = viewport)
 
-def parse_material(node, device, two_sided = False):
+def parse_material(node, device, param_dict, two_sided = False):
 
     def parse_material_bitmap(node, scale = None):
         reflectance_texture = None
@@ -249,7 +255,7 @@ def parse_material(node, device, two_sided = False):
         print('Unsupported material type:', node.attrib['type'])
         assert(False)
 
-def parse_shape(node, material_dict, shape_id, device, shape_group_dict = None):
+def parse_shape(node, material_dict, param_dict, shape_id, device, shape_group_dict = None):
     if node.attrib['type'] == 'obj' or node.attrib['type'] == 'serialized':
         to_world = torch.eye(4)
         serialized_shape_id = 0
@@ -260,7 +266,7 @@ def parse_shape(node, material_dict, shape_id, device, shape_group_dict = None):
         for child in node:
             if 'name' in child.attrib:
                 if child.attrib['name'] == 'filename':
-                    filename = child.attrib['value']
+                    filename = check_default(child.attrib['value'], param_dict)
                 elif child.attrib['name'] == 'toWorld' or child.attrib['name'] == 'to_world':
                     to_world = parse_transform(child)
                 elif child.attrib['name'] == 'shapeIndex':
@@ -435,21 +441,23 @@ def parse_shape(node, material_dict, shape_id, device, shape_group_dict = None):
         print('Shape type {} is not supported!'.format(node.attrib['type']))
         assert(False)
 
-def parse_scene(node, device):
-    cam = None
-    resolution = None
-    materials = []
-    material_dict = {}
-    shapes = []
-    lights = []
-    shape_group_dict = {}
-    envmap = None
-
+def parse_xml(node, device, param_dict, 
+    cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap):
+    
     for child in node:
-        if child.tag == 'sensor':
-            cam = parse_camera(child)
+        if child.tag == 'include':
+            cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap = \
+                            parse_xml(child, device, param_dict, 
+                                cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap)
+        elif child.tag == 'default':
+            # check if it is already in param_dict
+            default_n = child.attrib['name']
+            if default_n is not in param_dict:
+                param_dict[default_n] = check_default(child.attrib['value'], param_dict)
+        elif child.tag == 'sensor':
+            cam = parse_camera(child, param_dict)
         elif child.tag == 'bsdf':
-            node_id, material = parse_material(child, device)
+            node_id, material = parse_material(child, device, param_dict)
             if node_id is not None:
                 material_dict[node_id] = len(materials)
                 materials.append(material)
@@ -457,10 +465,17 @@ def parse_scene(node, device):
         elif child.tag == 'shape' and child.attrib['type'] == 'shapegroup':
             for child_s in child:
                 if child_s.tag == 'shape':
-                    shape_group_dict[child.attrib['id']] = parse_shape(child_s, material_dict, None)[0]
+                    shape_group_dict[child.attrib['id']] = parse_shape(child_s, material_dict, param_dict, None)[0]
         elif child.tag == 'shape':
-            shape, light = parse_shape(child, material_dict, len(shapes), device, shape_group_dict if child.attrib['type'] == 'instance' else None)
+
+            shape, light = parse_shape(child, material_dict, param_dict, len(shapes), device, shape_group_dict if child.attrib['type'] == 'instance' else None)
             shapes.append(shape)
+            # only shape
+            if('id' in child.attrib):
+                shape_id[child.attrib['id']] = len(shapes)
+            else:
+                shape_id[len(shapes)] = len(shapes)
+
             if light is not None:
                 lights.append(light)
         # Add envmap loading support
@@ -477,14 +492,33 @@ def parse_scene(node, device):
                     assert child_s.tag == 'string'
                     envmap_filename = child_s.attrib['value']
                 if child_s.attrib['name'] == 'toWorld' or child_s.attrib['name'] == 'to_world':
-                    to_world = parse_transform(child_s)
+                    to_world = parse_transform(child_s, param_dict)
             # load envmap
             envmap = scale * pyredner.imread(envmap_filename).to(device)
             envmap = pyredner.EnvironmentMap(envmap, env_to_world=to_world)
-    return pyredner.Scene(cam, shapes, materials, lights, envmap)
+
+    return cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap
+
+
+def parse_scene(node, device, param_dict):
+    cam = None
+    # resolution = None
+    materials = []
+    material_dict = {}
+    shapes = []
+    lights = []
+    shape_group_dict = {}
+    shape_id = {}
+    envmap = None
+
+    cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap = \
+                parse_xml(node, device, param_dict, 
+                                cam, materials, material_dict, shapes, shape_id, lights, shape_group_dict, envmap)
+    return pyredner.Scene(cam, shapes, shape_id, materials, lights, envmap)
 
 def load_mitsuba(filename: str,
-                 device: Optional[torch.device] = None):
+                 device: Optional[torch.device] = None,
+                 param_dict: dict):
     """
         Load from a Mitsuba scene file as PyTorch tensors.
 
@@ -507,6 +541,6 @@ def load_mitsuba(filename: str,
     root = tree.getroot()
     cwd = os.getcwd()
     os.chdir(os.path.dirname(filename))
-    ret = parse_scene(root, device)
+    ret = parse_scene(root, device, param_dict)
     os.chdir(cwd)
     return ret
