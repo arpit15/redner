@@ -28,6 +28,7 @@ class Scene:
                  envmap: Optional[pyredner.EnvironmentMap] = None):
         self.camera = camera
         self.envmap = envmap
+        self.shape_id = shape_id
         if objects is None:
             self.shapes = shapes
             self.materials = materials
@@ -64,7 +65,7 @@ class Scene:
                                        colors = obj.colors)
                 shapes.append(shape)
             self.shapes = shapes
-            self.shape_id = shape_id
+            #self.shape_id = shape_id
             self.materials = materials
             self.area_lights = area_lights
 
