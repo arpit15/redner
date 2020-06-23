@@ -476,9 +476,9 @@ def parse_xml(node, device, param_dict,
             shapes.append(shape)
             # only shape
             if('id' in child.attrib):
-                shape_id[child.attrib['id']] = len(shapes)
+                shape_id[child.attrib['id']] = len(shapes) - 1
             else:
-                shape_id[len(shapes)] = len(shapes)
+                shape_id[len(shapes)] = len(shapes) - 1
 
             if light is not None:
                 lights.append(light)
