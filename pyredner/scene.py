@@ -21,6 +21,7 @@ class Scene:
     def __init__(self,
                  camera: pyredner.Camera,
                  shapes: List[pyredner.Shape] = [],
+                 shape_id,
                  materials: List[pyredner.Material] = [],
                  area_lights: List[pyredner.AreaLight] = [],
                  objects: Optional[List[pyredner.Object]] = None,
@@ -63,8 +64,10 @@ class Scene:
                                        colors = obj.colors)
                 shapes.append(shape)
             self.shapes = shapes
+            self.shape_id = shape_id
             self.materials = materials
             self.area_lights = area_lights
+
 
     def state_dict(self):
         return {
